@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+src/__init__.py
+src/dp_pyparser_hw.egg-info/PKG-INFO
+src/dp_pyparser_hw.egg-info/SOURCES.txt
+src/dp_pyparser_hw.egg-info/dependency_links.txt
+src/dp_pyparser_hw.egg-info/requires.txt
+src/dp_pyparser_hw.egg-info/top_level.txt
+src/proj/__init__.py
+src/proj/parser.py
+src/proj/small_code.py
+src/tests/test_small_code.py
