@@ -124,6 +124,7 @@ def get_gold_moves(n0, n, stack, gold):
         return False
 
     valid = get_valid_moves(n0, n, len(stack))
+    #some gold moves get immedeatly selected careful later not part of criteria
     if not stack or (SHIFT in valid and gold[n0] == stack[-1]):
         return [SHIFT]
     if gold[stack[-1]] == n0:
