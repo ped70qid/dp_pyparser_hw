@@ -1,0 +1,1 @@
+uv run src\proj\parser.py train model_v2 data\projective\de_hdt-ud-dev-proj.conllu 

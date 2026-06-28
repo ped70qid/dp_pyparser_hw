@@ -12,20 +12,14 @@ from typing import TypeAlias
 
 
 
-SHIFT = 0; RIGHT = 1; LEFT = 2;
-MOVES = (SHIFT, RIGHT, LEFT)
-LABELS = []
-SHIFT_MOVES = [SHIFT]
-RIGHT_MOVES = [(RIGHT, label) for label in LABELS]
-LEFT_MOVES = [(LEFT, label) for label in LABELS] 
-MOVES_LAB = SHIFT_MOVES + RIGHT_MOVES = LEFT_MOVES
         
 
 
 START = ['-START-', '-START2-']
 END = ['-END-', '-END2-']
 
-ITERATIONS = 15
+# ITERATIONS = 15
+ITERATIONS = 1
 
 class DefaultList(list):
     """A list that returns a default value if index out of bounds."""
@@ -62,7 +56,7 @@ class Parse(object):
 class Parser(object):
     def __init__(self, model_dir, load=True):
         self.model_dir = model_dir
-        self.model = Perceptron(MOVES)
+        self.model = Perceptron(MOVES_LAB)
         if load:
             self.model.load(path.join(model_dir, 'parser.pickle'))
         self.tagger = PerceptronTagger(os.path.join(model_dir, 'tagger.pickle'), load=load)
@@ -82,9 +76,9 @@ class Parser(object):
             valid_moves = get_valid_moves(i, n, len(stack))
             guess = max(valid_moves, key=lambda move: scores[move])
             i = transition(guess, i, stack, parse)
-        return tags, parse.heads
+        return tags, parse.heads, parse.labels
 
-    def train_one(self, itn, words, gold_tags, gold_heads):
+    def train_one(self, itn, words, gold_tags, gold_heads, gold_labels):
         n = len(words)
         i = 2; stack = [1]; parse = Parse(n)
         tags = self.tagger.tag(words)
@@ -92,12 +86,12 @@ class Parser(object):
             features = extract_features(words, tags, i, n, stack, parse)
             scores = self.model.score(features)
             valid_moves = get_valid_moves(i, n, len(stack))
-            gold_moves = get_gold_moves(i, n, stack, gold_heads)
+            gold_moves = get_gold_moves(i, n, stack, gold_heads, gold_labels)
             guess = max(valid_moves, key=lambda move: scores[move])
             assert gold_moves
             best = max(gold_moves, key=lambda move: scores[move])
             self.model.update(best, guess, features)
-            i = transition(guess, i, stack, parse)
+            i = transition(guess, i, stack, parse) # do the transition you predicted
             self.confusion_matrix[best][guess] += 1
         return len([i for i in range(n-1) if parse.heads[i] == gold_heads[i]])
 
@@ -117,7 +111,7 @@ def transition(move: tuple[int,str], i, stack, parse: Parse):
     assert move in MOVES_LAB
 
 
-def get_valid_moves(i, n, stack_depth):
+def get_valid_moves(i, n, stack_depth) -> list[tuple[int,str]]:
     moves = []
     if (i+1) < n:
         moves.extend(SHIFT_MOVES)
@@ -128,7 +122,15 @@ def get_valid_moves(i, n, stack_depth):
     return moves
 
 
-def get_gold_moves(n0, n, stack, gold):
+def get_gold_moves(n0, n, stack, gold, gold_labels): 
+    """ 
+    Update: besides 'shift' the moves are now tuples! \n
+    n0 -> lauf index \n
+    n -> len(word) \n
+    stack -> stack \n
+    gold -> gold_heads \n 
+    gold_labels -> die labels aus read_conll() \n
+    """
     def deps_between(target, others, gold):
         for word in others:
             if gold[word] == target or gold[target] == word:
@@ -137,24 +139,24 @@ def get_gold_moves(n0, n, stack, gold):
 
     valid = get_valid_moves(n0, n, len(stack))
     #some gold moves get immedeatly selected careful later not part of criteria
-    if not stack or (SHIFT in valid and gold[n0] == stack[-1]):
-        return [SHIFT]
+    if not stack or ((SHIFT, None) in valid and gold[n0] == stack[-1]):
+        return [(SHIFT, None)]
     if gold[stack[-1]] == n0:
-        return [LEFT]
-    costly = set([m for m in MOVES if m not in valid])
+        return [(LEFT, gold_labels[n0])]
+    costly = set([m for m in MOVES_LAB if m not in valid])
     # If the word behind s0 is its gold head, Left is incorrect
     if len(stack) >= 2 and gold[stack[-1]] == stack[-2]:
-        costly.add(LEFT)
+        costly.add((LEFT, gold_labels[n0]))
     # If there are any dependencies between n0 and the stack,
     # pushing n0 will lose them.
-    if SHIFT not in costly and deps_between(n0, stack, gold):
-        costly.add(SHIFT)
+    if (SHIFT, None) not in costly and deps_between(n0, stack, gold):
+        costly.add((SHIFT, None))
     # If there are any dependencies between s0 and the buffer, popping
     # s0 will lose them.
     if deps_between(stack[-1], range(n0+1, n-1), gold):
-        costly.add(LEFT)
-        costly.add(RIGHT)
-    return [m for m in MOVES if m not in costly]
+        costly.add((LEFT, gold_labels[n0]))
+        costly.add((RIGHT, gold_labels[n0]))
+    return [m for m in MOVES_LAB if m not in costly]
 
 
 def extract_features(words, tags, n0, n, stack, parse):
@@ -453,7 +455,7 @@ def _pc(n, d):
     return (float(n) / d) * 100
 
 
-def train(parser, sentences, nr_iter):
+def train(parser: Parser, sentences, nr_iter):
     parser.tagger.start_training(sentences)
     for itn in range(nr_iter):
         corr = 0; total = 0
@@ -461,7 +463,7 @@ def train(parser, sentences, nr_iter):
         for words, gold_tags, gold_parse, gold_label in sentences:
             if gold_label not in LABELS:
                 LABELS.append(gold_label)
-            corr += parser.train_one(itn, words, gold_tags, gold_parse)
+            corr += parser.train_one(itn, words, gold_tags, gold_parse, gold_label)
             if itn < 5:
                 parser.tagger.train_one(words, gold_tags)
             total += len(words)
@@ -494,6 +496,9 @@ def pad_tokens(tokens):
 
 
 def main_train(model_dir, train_loc):
+
+
+
     if not os.path.exists(model_dir):
         os.mkdir(model_dir)
     parser = Parser(model_dir, load=False)
@@ -507,14 +512,17 @@ def main_test(model_dir, heldout_gold):
     gold_sents = list(read_conll(heldout_gold))
     correct_trees = 0
     c = 0
+    l = 0
     t = 0
     t1 = time.time()
     for (words, _, gold_heads, gold_labels) in gold_sents:
-        _, heads = parser.parse(words)
+        _, heads, labels= parser.parse(words)
         false_arcs = 0
         for i, w in list(enumerate(words))[1:-1]:
             if gold_labels[i] in ('P', 'punct'):
                 continue
+            if labels[i] == gold_labels[i]:
+                l += 1
             if heads[i] == gold_heads[i]:
                 c += 1
             else:
@@ -525,6 +533,7 @@ def main_test(model_dir, heldout_gold):
     t2 = time.time()
     print('Parsing took %0.3f ms' % ((t2-t1)*1000.0))
     print('UAS:', f'{c} / {t}', '=', float(c)/t)
+    print('LAS:', f'{l} / {t}', '=', float(l)/t)
     print('Correct trees:', f'{correct_trees} / {len(gold_sents)}', '=', float(correct_trees)/len(gold_sents))
 
 
@@ -546,8 +555,30 @@ def main_parse(model_dir, input_text=None):
         print()
 
 
+def collect_labels(sentences):
+    labels = set()
+    for _, _, _, gold_labels in sentences:
+        for label in gold_labels:
+            if label is not None:
+                labels.add(label)
+    return sorted(labels)
+
+
 if __name__ == '__main__':
     if len(sys.argv) == 4 and sys.argv[1] == 'train':
+          
+        SHIFT = 0; RIGHT = 1; LEFT = 2;
+        MOVES = (SHIFT, RIGHT, LEFT)
+        # MOVES_LAB = SHIFT_MOVES + RIGHT_MOVES + LEFT_MOVES
+        sentences = list(read_conll(sys.argv[3]))
+
+        LABELS = collect_labels(sentences)
+        SHIFT_MOVES = [(SHIFT, None)]
+        RIGHT_MOVES = [(RIGHT, label) for label in LABELS]
+        LEFT_MOVES = [(LEFT, label) for label in LABELS] 
+        MOVES_LAB = SHIFT_MOVES + RIGHT_MOVES + LEFT_MOVES 
+
+        parser = Parser(sys.argv[2], load=False)
         main_train(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 4 and sys.argv[1] == 'test':
         main_test(sys.argv[2], sys.argv[3])
