@@ -8,9 +8,17 @@ from collections import defaultdict
 import random
 import time
 import pickle
+from typing import TypeAlias
+
+
 
 SHIFT = 0; RIGHT = 1; LEFT = 2;
 MOVES = (SHIFT, RIGHT, LEFT)
+LABELS = []
+MOVES2 = [SHIFT] +\
+        [(RIGHT, label) for label in LABELS] + \
+        [(LEFT, label) for label in LABELS]
+
 START = ['-START-', '-START2-']
 END = ['-END-', '-END2-']
 
@@ -27,7 +35,6 @@ class DefaultList(list):
             return list.__getitem__(self, index)
         except IndexError:
             return self.default
-
 
 class Parse(object):
     def __init__(self, n):
@@ -268,8 +275,9 @@ class Perceptron(object):
         # Number of instances seen
         self.i = 0
 
-    def predict(self, features):
-        '''Dot-product the features and current weights and return the best class.'''
+    def predict(self, features: defaultdict[int]): 
+        '''Dot-product the features and current weights and return the best class.\n
+        returns the clas with the maximum score'''
         scores = self.score(features)
         # Do a secondary alphabetic sort, for stability
         return max(self.classes, key=lambda clas: (scores[clas], clas))
@@ -446,6 +454,8 @@ def train(parser, sentences, nr_iter):
         corr = 0; total = 0
         random.shuffle(sentences)
         for words, gold_tags, gold_parse, gold_label in sentences:
+            if gold_label not in LABELS:
+                LABELS.append(gold_label)
             corr += parser.train_one(itn, words, gold_tags, gold_parse)
             if itn < 5:
                 parser.tagger.train_one(words, gold_tags)
@@ -459,7 +469,7 @@ def train(parser, sentences, nr_iter):
 
 def read_conll(loc):
     for sent_str in open(loc).read().strip().split('\n\n'):
-        lines = [line.split() for line in sent_str.split('\n') if line[0] != '#']  # ignore comments
+        lines = [line.split("\t") for line in sent_str.split('\n') if line[0] != '#']  # ignore comments #i did add /t for better splitting
         lines = [slots for slots in lines if '-' not in slots[0]]  # ignore multi-span tokens
         words = DefaultList(''); tags = DefaultList('')
         heads = [None]; labels = [None]
