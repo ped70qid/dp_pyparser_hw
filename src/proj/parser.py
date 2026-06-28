@@ -15,9 +15,12 @@ from typing import TypeAlias
 SHIFT = 0; RIGHT = 1; LEFT = 2;
 MOVES = (SHIFT, RIGHT, LEFT)
 LABELS = []
-MOVES_LAB = [SHIFT] +\
-        [(RIGHT, label) for label in LABELS] + \
-        [(LEFT, label) for label in LABELS]
+SHIFT_MOVES = [SHIFT]
+RIGHT_MOVES = [(RIGHT, label) for label in LABELS]
+LEFT_MOVES = [(LEFT, label) for label in LABELS] 
+MOVES_LAB = SHIFT_MOVES + RIGHT_MOVES = LEFT_MOVES
+        
+
 
 START = ['-START-', '-START2-']
 END = ['-END-', '-END2-']
@@ -117,11 +120,11 @@ def transition(move: tuple[int,str], i, stack, parse: Parse):
 def get_valid_moves(i, n, stack_depth):
     moves = []
     if (i+1) < n:
-        moves.append(SHIFT)
+        moves.extend(SHIFT_MOVES)
     if stack_depth >= 2:
-        moves.append(RIGHT)
+        moves.extend(RIGHT_MOVES)
     if stack_depth >= 1:
-        moves.append(LEFT)
+        moves.extend(LEFT_MOVES)
     return moves
 
 
