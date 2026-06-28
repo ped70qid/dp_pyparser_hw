@@ -15,7 +15,7 @@ from typing import TypeAlias
 SHIFT = 0; RIGHT = 1; LEFT = 2;
 MOVES = (SHIFT, RIGHT, LEFT)
 LABELS = []
-MOVES2 = [SHIFT] +\
+MOVES_LAB = [SHIFT] +\
         [(RIGHT, label) for label in LABELS] + \
         [(LEFT, label) for label in LABELS]
 
@@ -99,17 +99,19 @@ class Parser(object):
         return len([i for i in range(n-1) if parse.heads[i] == gold_heads[i]])
 
 
-def transition(move, i, stack, parse):
-    if move == SHIFT:
+def transition(move: tuple[int,str], i, stack, parse: Parse):
+    m, label = move
+    if m == SHIFT:
         stack.append(i)
         return i + 1
-    elif move == RIGHT:
-        parse.add(stack[-2], stack.pop())
+    elif m == RIGHT:
+        parse.add(stack[-2], stack.pop(), label)
         return i
-    elif move == LEFT:
-        parse.add(i, stack.pop())
+    elif m == LEFT:
+        parse.add(i, stack.pop(), label)
         return i
-    assert move in MOVES
+    assert m in MOVES
+    assert move in MOVES_LAB
 
 
 def get_valid_moves(i, n, stack_depth):
