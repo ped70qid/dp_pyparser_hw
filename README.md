@@ -8,3 +8,5 @@
 
 wierd stuff happening when you name test funcitons the same, then only one test passes or failes even though more are defined --> overloading??
 
+
+labels are gather in train\3, also need to be saved still to the pickle file
