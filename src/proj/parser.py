@@ -142,11 +142,14 @@ def get_gold_moves(n0, n, stack, gold, gold_labels):
     if not stack or ((SHIFT, None) in valid and gold[n0] == stack[-1]):
         return [(SHIFT, None)]
     if gold[stack[-1]] == n0:
-        return [(LEFT, gold_labels[n0])]
+        return [(LEFT, gold_labels[stack[-1]])]
     costly = set([m for m in MOVES_LAB if m not in valid])
     # If the word behind s0 is its gold head, Left is incorrect
     if len(stack) >= 2 and gold[stack[-1]] == stack[-2]:
-        costly.add((LEFT, gold_labels[n0]))
+        # print(len(gold), len(gold_labels))
+        # print(n, n0)
+        # print()
+        costly.add((LEFT, gold_labels[stack[-1]]))
     # If there are any dependencies between n0 and the stack,
     # pushing n0 will lose them.
     if (SHIFT, None) not in costly and deps_between(n0, stack, gold):
@@ -154,8 +157,8 @@ def get_gold_moves(n0, n, stack, gold, gold_labels):
     # If there are any dependencies between s0 and the buffer, popping
     # s0 will lose them.
     if deps_between(stack[-1], range(n0+1, n-1), gold):
-        costly.add((LEFT, gold_labels[n0]))
-        costly.add((RIGHT, gold_labels[n0]))
+        costly.add((LEFT, label) for label in LABELS)
+        costly.add((RIGHT, label) for label in LABELS)
     return [m for m in MOVES_LAB if m not in costly]
 
 
@@ -565,19 +568,17 @@ def collect_labels(sentences):
 
 
 if __name__ == '__main__':
+    SHIFT = 0; RIGHT = 1; LEFT = 2;
+    MOVES = (SHIFT, RIGHT, LEFT)
+    # MOVES_LAB = SHIFT_MOVES + RIGHT_MOVES + LEFT_MOVES
+    sentences = list(read_conll(sys.argv[3]))
+
+    LABELS = collect_labels(sentences)
+    SHIFT_MOVES = [(SHIFT, None)]
+    RIGHT_MOVES = [(RIGHT, label) for label in LABELS]
+    LEFT_MOVES = [(LEFT, label) for label in LABELS] 
+    MOVES_LAB = SHIFT_MOVES + RIGHT_MOVES + LEFT_MOVES 
     if len(sys.argv) == 4 and sys.argv[1] == 'train':
-          
-        SHIFT = 0; RIGHT = 1; LEFT = 2;
-        MOVES = (SHIFT, RIGHT, LEFT)
-        # MOVES_LAB = SHIFT_MOVES + RIGHT_MOVES + LEFT_MOVES
-        sentences = list(read_conll(sys.argv[3]))
-
-        LABELS = collect_labels(sentences)
-        SHIFT_MOVES = [(SHIFT, None)]
-        RIGHT_MOVES = [(RIGHT, label) for label in LABELS]
-        LEFT_MOVES = [(LEFT, label) for label in LABELS] 
-        MOVES_LAB = SHIFT_MOVES + RIGHT_MOVES + LEFT_MOVES 
-
         parser = Parser(sys.argv[2], load=False)
         main_train(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 4 and sys.argv[1] == 'test':
