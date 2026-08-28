@@ -56,7 +56,7 @@ class Parse(object):
 class Parser(object):
     def __init__(self, model_dir, load=True):
         self.model_dir = model_dir
-        self.model = Perceptron(MOVES_LAB)
+        self.model = Perceptron(MOVES)
         if load:
             self.model.load(path.join(model_dir, 'parser.pickle'))
         self.tagger = PerceptronTagger(os.path.join(model_dir, 'tagger.pickle'), load=load)
@@ -78,7 +78,8 @@ class Parser(object):
             i = transition(guess, i, stack, parse)
         return tags, parse.heads, parse.labels
 
-    def train_one(self, itn, words, gold_tags, gold_heads, gold_labels):
+    def train_one(self, itn, words, gold_tags, gold_heads):
+        '''returns the number or correctly predicted heads'''
         n = len(words)
         i = 2; stack = [1]; parse = Parse(n)
         tags = self.tagger.tag(words)
@@ -86,7 +87,7 @@ class Parser(object):
             features = extract_features(words, tags, i, n, stack, parse)
             scores = self.model.score(features)
             valid_moves = get_valid_moves(i, n, len(stack))
-            gold_moves = get_gold_moves(i, n, stack, gold_heads, gold_labels)
+            gold_moves = get_gold_moves(i, n, stack, gold_heads)
             guess = max(valid_moves, key=lambda move: scores[move])
             assert gold_moves
             best = max(gold_moves, key=lambda move: scores[move])
@@ -97,32 +98,30 @@ class Parser(object):
 
 
 def transition(move: tuple[int,str], i, stack, parse: Parse):
-    m, label = move
-    if m == SHIFT:
+    if move == SHIFT:
         stack.append(i)
         return i + 1
-    elif m == RIGHT:
-        parse.add(stack[-2], stack.pop(), label)
+    elif move == RIGHT:
+        parse.add(stack[-2], stack.pop())
         return i
-    elif m == LEFT:
-        parse.add(i, stack.pop(), label)
+    elif move == LEFT:
+        parse.add(i, stack.pop())
         return i
-    assert m in MOVES
-    assert move in MOVES_LAB
+    assert move in MOVES
 
 
-def get_valid_moves(i, n, stack_depth) -> list[tuple[int,str]]:
+def get_valid_moves(i, n, stack_depth) -> list[int]:
     moves = []
     if (i+1) < n:
-        moves.extend(SHIFT_MOVES)
+        moves.append(SHIFT)
     if stack_depth >= 2:
-        moves.extend(RIGHT_MOVES)
+        moves.append(RIGHT)
     if stack_depth >= 1:
-        moves.extend(LEFT_MOVES)
+        moves.append(LEFT)
     return moves
 
 
-def get_gold_moves(n0, n, stack, gold, gold_labels): 
+def get_gold_moves(n0, n, stack, gold) -> list[int]: 
     """ 
     Update: besides 'shift' the moves are now tuples! \n
     n0 -> lauf index \n
@@ -139,27 +138,27 @@ def get_gold_moves(n0, n, stack, gold, gold_labels):
 
     valid = get_valid_moves(n0, n, len(stack))
     #some gold moves get immedeatly selected careful later not part of criteria
-    if not stack or ((SHIFT, None) in valid and gold[n0] == stack[-1]):
-        return [(SHIFT, None)]
+    if not stack or (SHIFT in valid and gold[n0] == stack[-1]):
+        return [SHIFT]
     if gold[stack[-1]] == n0:
-        return [(LEFT, gold_labels[stack[-1]])]
-    costly = set([m for m in MOVES_LAB if m not in valid])
+        return [LEFT]
+    costly = set([m for m in MOVES if m not in valid])
     # If the word behind s0 is its gold head, Left is incorrect
     if len(stack) >= 2 and gold[stack[-1]] == stack[-2]:
         # print(len(gold), len(gold_labels))
         # print(n, n0)
         # print()
-        costly.add((LEFT, gold_labels[stack[-1]]))
+        costly.add(LEFT)
     # If there are any dependencies between n0 and the stack,
     # pushing n0 will lose them.
-    if (SHIFT, None) not in costly and deps_between(n0, stack, gold):
-        costly.add((SHIFT, None))
+    if SHIFT not in costly and deps_between(n0, stack, gold):
+        costly.add(SHIFT)
     # If there are any dependencies between s0 and the buffer, popping
     # s0 will lose them.
     if deps_between(stack[-1], range(n0+1, n-1), gold):
-        costly.add((LEFT, label) for label in LABELS)
-        costly.add((RIGHT, label) for label in LABELS)
-    return [m for m in MOVES_LAB if m not in costly]
+        costly.add(LEFT)
+        costly.add(RIGHT)
+    return [m for m in MOVES if m not in costly]
 
 
 def extract_features(words, tags, n0, n, stack, parse):
@@ -271,10 +270,12 @@ def extract_features(words, tags, n0, n, stack, parse):
 
 
 class Perceptron(object):
+    '''predicts which move to do \n
+    - classes = moves'''
     def __init__(self, classes=None):
         # Each feature gets its own weight vector, so weights is a dict-of-arrays
         self.classes = classes
-        self.weights = {}
+        self.weights  = {}
         # The accumulated values, for the averaging. These will be keyed by
         # feature/clas tuples
         self._totals = defaultdict(int)
@@ -292,7 +293,7 @@ class Perceptron(object):
         # Do a secondary alphabetic sort, for stability
         return max(self.classes, key=lambda clas: (scores[clas], clas))
 
-    def score(self, features):
+    def score(self, features: dict[str,float]):
         all_weights = self.weights
         scores = dict((clas, 0) for clas in self.classes)
         for feat, value in features.items():
@@ -305,7 +306,7 @@ class Perceptron(object):
                 scores[clas] += value * weight
         return scores
 
-    def update(self, truth, guess, features):       
+    def update(self, truth: int, guess: int, features):       
         def upd_feat(c, f, w, v):
             param = (f, c)
             self._totals[param] += (self.i - self._tstamps[param]) * w
@@ -333,6 +334,7 @@ class Perceptron(object):
             self.weights[feat] = new_feat_weights
 
     def save(self, path):
+        '''Saves self.weights to path.'''
         print("Saving model to %s" % path)
         pickle.dump(self.weights, open(path, 'wb'))
 
@@ -381,6 +383,7 @@ class PerceptronTagger(object):
         self.end_training(save_loc)
 
     def save(self):
+        '''Saves model weights and the tagdict.'''
         # Pickle as a binary file
         pickle.dump((self.model.weights, self.tagdict, self.classes),
                     open(self.model_loc, 'wb'), -1)
@@ -464,9 +467,9 @@ def train(parser: Parser, sentences, nr_iter):
         corr = 0; total = 0
         random.shuffle(sentences)
         for words, gold_tags, gold_parse, gold_label in sentences:
-            if gold_label not in LABELS:
-                LABELS.append(gold_label)
-            corr += parser.train_one(itn, words, gold_tags, gold_parse, gold_label)
+            # if gold_label not in LABELS:
+            #     LABELS.append(gold_label)
+            corr += parser.train_one(itn, words, gold_tags, gold_parse)
             if itn < 5:
                 parser.tagger.train_one(words, gold_tags)
             total += len(words)
@@ -499,12 +502,9 @@ def pad_tokens(tokens):
 
 
 def main_train(model_dir, train_loc):
-
-
-
     if not os.path.exists(model_dir):
         os.mkdir(model_dir)
-    parser = Parser(model_dir, load=False)
+    parser  = Parser(model_dir, load=False)
     sentences = list(read_conll(train_loc))
     train(parser, sentences, nr_iter=ITERATIONS)
     parser.save()
