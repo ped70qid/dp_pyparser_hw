@@ -25,6 +25,7 @@ TODO:
 --------------
 - adjust scoring function to something like $scoring()=s\_heads() + s\_labels()$ so you dont get these huge classes, with the Tupels $(head,label)$
 - remove old Moves_lab stuff 
+- probably add labels in `transitions()`
 
 Explainations:
 ---
