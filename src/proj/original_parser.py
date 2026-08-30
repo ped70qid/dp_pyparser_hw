@@ -89,6 +89,7 @@ class Parser(object):
             self.model.update(best, guess, features)
             i = transition(guess, i, stack, parse)
             self.confusion_matrix[best][guess] += 1
+            print(f"{features=}")
         return len([i for i in range(n-1) if parse.heads[i] == gold_heads[i]])
 
 
@@ -299,7 +300,6 @@ class Perceptron(object):
         if truth == guess:
             return None
         for f in features:
-            print(f"{self.weights=}")
             weights = self.weights.setdefault(f, {})
             upd_feat(truth, f, weights.get(truth, 0.0), 1.0)
             upd_feat(guess, f, weights.get(guess, 0.0), -1.0)

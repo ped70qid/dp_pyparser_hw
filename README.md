@@ -26,7 +26,11 @@ TODO:
 - adjust scoring function to something like $scoring()=s\_heads() + s\_labels()$ so you dont get these huge classes, with the Tupels $(head,label)$
 - remove old Moves_lab stuff 
 - probably add labels in `transitions()`
-- should i use the PerceptronTagger, for predicting the lables first?
+- should i use the PerceptronTagger, for predicting the lables first? -> new Features as well?
+- Parser.train_one() --> transitions(...) gets called here with 'guess'. better with 'best'?
+- transitions() --> add() label param added
+- why features implemented as dict[str, 1]??? 1 is unneccessary? -> onehot encoding basically
+- fix dumping and loading classes for labels --> look at PerceptronTagger
 
 Explainations:
 ---

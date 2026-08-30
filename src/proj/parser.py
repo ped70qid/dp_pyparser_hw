@@ -56,56 +56,83 @@ class Parse(object):
 class Parser(object):
     def __init__(self, model_dir, load=True):
         self.model_dir = model_dir
-        self.model = Perceptron(MOVES)
+        self.move_model = Perceptron(MOVES)
+        self.label_model = Perceptron(LABELS)
         if load:
-            self.model.load(path.join(model_dir, 'parser.pickle'))
+            self.move_model.load(path.join(model_dir, 'parser.pickle'))
+            self.label_model.load(path.join(model_dir, 'labeler.pickle'))
         self.tagger = PerceptronTagger(os.path.join(model_dir, 'tagger.pickle'), load=load)
         self.confusion_matrix = defaultdict(lambda: defaultdict(int))
 
     def save(self):
-        self.model.save(path.join(self.model_dir, 'parser.pickle'))
+        self.move_model.save(path.join(self.model_dir, 'parser.pickle'))
+        self.label_model.save(path.join(self.model_dir, 'labeler.pickle'))
         self.tagger.save()
     
     def parse(self, words):
+        print(f"{self.label_model.classes=}")
         n = len(words)
         i = 2; stack = [1]; parse = Parse(n)
         tags = self.tagger.tag(words)
         while stack or (i+1) < n:
             features = extract_features(words, tags, i, n, stack, parse)
-            scores = self.model.score(features)
+            scores_move = self.move_model.score(features)
             valid_moves = get_valid_moves(i, n, len(stack))
-            guess = max(valid_moves, key=lambda move: scores[move])
-            i = transition(guess, i, stack, parse)
+            guess = max(valid_moves, key=lambda move: scores_move[move])
+            label = None
+            if guess != SHIFT:
+                scores_label = self.label_model.score(features)
+                label = max(self.label_model.classes, key= lambda l: scores_label[l])
+                
+            i = transition(guess, label, i, stack, parse)
         return tags, parse.heads, parse.labels
 
-    def train_one(self, itn, words, gold_tags, gold_heads):
+    def train_one(self, itn, words, gold_tags, gold_labels, gold_heads):
         '''returns the number or correctly predicted heads'''
         n = len(words)
         i = 2; stack = [1]; parse = Parse(n)
         tags = self.tagger.tag(words)
         while stack or (i + 1) < n:
             features = extract_features(words, tags, i, n, stack, parse)
-            scores = self.model.score(features)
+            scores = self.move_model.score(features)
             valid_moves = get_valid_moves(i, n, len(stack))
             gold_moves = get_gold_moves(i, n, stack, gold_heads)
             guess = max(valid_moves, key=lambda move: scores[move])
             assert gold_moves
             best = max(gold_moves, key=lambda move: scores[move])
-            self.model.update(best, guess, features)
-            i = transition(guess, i, stack, parse) # do the transition you predicted
+            self.move_model.update(best, guess, features)
+
+            label = None
+            if best != SHIFT:
+                if best == RIGHT:
+                    idx = stack[-1]
+                else:
+                    idx = stack[-1]
+                # in both casses idx is the last stack element by construction, collapse later
+                features = features
+                scores_label = self.label_model.score(features)
+                # guess_label = max(self.label_model.classes, key= lambda clas: scores_label[clas] )
+                guess_label = max(scores_label, key= lambda l: scores_label[l])
+                
+                gold_label = gold_labels[idx]
+                self.label_model.update(gold_label, guess_label, features)
+                label = gold_label
+
+            i = transition(guess, label, i, stack, parse) # do the transition you predicted
             self.confusion_matrix[best][guess] += 1
         return len([i for i in range(n-1) if parse.heads[i] == gold_heads[i]])
 
 
-def transition(move: tuple[int,str], i, stack, parse: Parse):
+def transition(move: int, label: str, i, stack, parse: Parse):
+    '''execute the transition or append to stack'''
     if move == SHIFT:
         stack.append(i)
         return i + 1
     elif move == RIGHT:
-        parse.add(stack[-2], stack.pop())
+        parse.add(stack[-2], stack.pop(), label)
         return i
     elif move == LEFT:
-        parse.add(i, stack.pop())
+        parse.add(i, stack.pop(), label)
         return i
     assert move in MOVES
 
@@ -293,7 +320,8 @@ class Perceptron(object):
         # Do a secondary alphabetic sort, for stability
         return max(self.classes, key=lambda clas: (scores[clas], clas))
 
-    def score(self, features: dict[str,float]):
+    def score(self, features: dict[str,float]) -> dict:
+        '''returns a dict of type dict(clas, score)'''
         all_weights = self.weights
         scores = dict((clas, 0) for clas in self.classes)
         for feat, value in features.items():
@@ -302,6 +330,7 @@ class Perceptron(object):
             if feat not in all_weights:
                 continue
             weights = all_weights[feat]
+            # print(f"{all_weights=}")
             for clas, weight in weights.items():
                 scores[clas] += value * weight
         return scores
@@ -469,7 +498,7 @@ def train(parser: Parser, sentences, nr_iter):
         for words, gold_tags, gold_parse, gold_label in sentences:
             # if gold_label not in LABELS:
             #     LABELS.append(gold_label)
-            corr += parser.train_one(itn, words, gold_tags, gold_parse)
+            corr += parser.train_one(itn, words, gold_tags, gold_label, gold_parse)
             if itn < 5:
                 parser.tagger.train_one(words, gold_tags)
             total += len(words)
@@ -477,7 +506,8 @@ def train(parser: Parser, sentences, nr_iter):
         if itn == 4:
             parser.tagger.model.average_weights()
     print('Averaging weights')
-    parser.model.average_weights()
+    parser.move_model.average_weights()
+    parser.label_model.average_weights()
 
 
 def read_conll(loc):
