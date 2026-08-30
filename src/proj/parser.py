@@ -12,6 +12,7 @@ from typing import TypeAlias
 
 
 
+
         
 
 
@@ -65,12 +66,11 @@ class Parser(object):
         self.confusion_matrix = defaultdict(lambda: defaultdict(int))
 
     def save(self):
-        self.move_model.save(path.join(self.model_dir, 'parser.pickle'))
-        self.label_model.save(path.join(self.model_dir, 'labeler.pickle'))
+        self.move_model.save(os.path.join(self.model_dir, 'parser.pickle'))
+        self.label_model.save(os.path.join(self.model_dir, 'labeler.pickle'))
         self.tagger.save()
     
     def parse(self, words):
-        print(f"{self.label_model.classes=}")
         n = len(words)
         i = 2; stack = [1]; parse = Parse(n)
         tags = self.tagger.tag(words)
@@ -365,10 +365,11 @@ class Perceptron(object):
     def save(self, path):
         '''Saves self.weights to path.'''
         print("Saving model to %s" % path)
-        pickle.dump(self.weights, open(path, 'wb'))
+        pickle.dump((self.weights, self.classes),
+                    open(path, 'wb'), -1)
 
     def load(self, path):
-        self.weights = pickle.load(open(path, 'rb'))
+        self.weights, self.classes = pickle.load(open(path, 'rb'))
 
 
 class PerceptronTagger(object):
