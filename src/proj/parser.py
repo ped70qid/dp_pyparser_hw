@@ -275,7 +275,7 @@ class Perceptron(object):
     def __init__(self, classes=None):
         # Each feature gets its own weight vector, so weights is a dict-of-arrays
         self.classes = classes
-        self.weights  = {}
+        self.weights: dict[str, dict[int, float]]  = {}
         # The accumulated values, for the averaging. These will be keyed by
         # feature/clas tuples
         self._totals = defaultdict(int)
