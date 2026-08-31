@@ -32,6 +32,17 @@ TODO:
 - why features implemented as dict[str, 1]??? 1 is unneccessary? -> onehot encoding basically
 - fix dumping and loading classes for labels --> look at PerceptronTagger
 
+Branch
+- add label features --> because of pad_tokens() label list is shorter than tags and words
+- scoring
+- get_gold_moves, and get valid_moves dont care about the labels. ONly make sure, that moves get returned in the new format, with all the labels attached
+
+1. new classes - done
+2. update train_one() with new arcs 
+3. make function to deal with the moves from get_valid_moves() and get_gold_moves()
+4. update parse() to tuples
+5. get rid of the second Perceptron() originally used for labels
+
 Explainations:
 ---
 - Perceptron().classes => Moves (shift, right, left)

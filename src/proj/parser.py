@@ -19,8 +19,8 @@ from typing import TypeAlias
 START = ['-START-', '-START2-']
 END = ['-END-', '-END2-']
 
-# ITERATIONS = 15
 ITERATIONS = 15
+# ITERATIONS = 1
 
 class DefaultList(list):
     """A list that returns a default value if index out of bounds."""
@@ -57,19 +57,23 @@ class Parse(object):
 class Parser(object):
     def __init__(self, model_dir, load=True):
         self.model_dir = model_dir
-        self.move_model = Perceptron(MOVES)
-        self.label_model = Perceptron(LABELS)
+        self.move_model = Perceptron(Classes)
         if load:
             self.move_model.load(path.join(model_dir, 'parser.pickle'))
-            self.label_model.load(path.join(model_dir, 'labeler.pickle'))
         self.tagger = PerceptronTagger(os.path.join(model_dir, 'tagger.pickle'), load=load)
         self.confusion_matrix = defaultdict(lambda: defaultdict(int))
 
     def save(self):
         self.move_model.save(os.path.join(self.model_dir, 'parser.pickle'))
-        self.label_model.save(os.path.join(self.model_dir, 'labeler.pickle'))
         self.tagger.save()
     
+    def add_labels_to_moves(self, moves: list[int]) -> list[tuple[int,str]]:
+        '''takes a list with moves, and returns the arcs from classes of that move'''
+        arcs = []
+        for move in moves:
+            arcs.extend([arc for arc in self.move_model.classes if arc[0] == move])
+        return arcs
+        
     def parse(self, words):
         n = len(words)
         i = 2; stack = [1]; parse = Parse(n)
@@ -78,17 +82,15 @@ class Parser(object):
             features = extract_features(words, tags, i, n, stack, parse)
             scores_move = self.move_model.score(features)
             valid_moves = get_valid_moves(i, n, len(stack))
-            guess = max(valid_moves, key=lambda move: scores_move[move])
-            label = None
-            if guess != SHIFT:
-                scores_label = self.label_model.score(features)
-                label = max(self.label_model.classes, key= lambda l: scores_label[l])
+            valid_arcs = self.add_labels_to_moves(valid_moves)
+            guess_move, guess_label = max(valid_arcs, key=lambda arc: scores_move[arc])
                 
-            i = transition(guess, label, i, stack, parse)
+            i = transition(guess_move, guess_label, i, stack, parse)
         return tags, parse.heads, parse.labels
 
     def train_one(self, itn, words, gold_tags, gold_labels, gold_heads):
         '''returns the number or correctly predicted heads'''
+            
         n = len(words)
         i = 2; stack = [1]; parse = Parse(n)
         tags = self.tagger.tag(words)
@@ -96,30 +98,27 @@ class Parser(object):
             features = extract_features(words, tags, i, n, stack, parse)
             scores = self.move_model.score(features)
             valid_moves = get_valid_moves(i, n, len(stack))
+            valid_arcs = self.add_labels_to_moves(valid_moves)
             gold_moves = get_gold_moves(i, n, stack, gold_heads)
-            guess = max(valid_moves, key=lambda move: scores[move])
+            gold_arcs= self.add_labels_to_moves(gold_moves)
+            guess_move, guess_label = max(valid_arcs, key=lambda arc: scores[arc])
             assert gold_moves
-            best = max(gold_moves, key=lambda move: scores[move])
-            self.move_model.update(best, guess, features)
+            best_move, best_label = max(gold_arcs, key=lambda arc: scores[arc])
+            self.move_model.update((best_move, best_label), (guess_move, guess_label), features)
 
+            # for making sure, that an optimal arc has the correct label
             label = None
-            if best != SHIFT:
-                if best == RIGHT:
+            if best_move != SHIFT:
+                if best_move == RIGHT:
                     idx = stack[-1]
                 else:
                     idx = stack[-1]
-                # in both casses idx is the last stack element by construction, collapse later
-                features = features
-                scores_label = self.label_model.score(features)
-                # guess_label = max(self.label_model.classes, key= lambda clas: scores_label[clas] )
-                guess_label = max(scores_label, key= lambda l: scores_label[l])
-                
-                gold_label = gold_labels[idx]
-                self.label_model.update(gold_label, guess_label, features)
-                label = gold_label
+                label = gold_labels[idx]
 
-            i = transition(guess, label, i, stack, parse) # do the transition you predicted
-            self.confusion_matrix[best][guess] += 1
+
+
+            i = transition(guess_move, label, i, stack, parse) # do the transition you predicted
+            self.confusion_matrix[best_move][guess_move] += 1
         return len([i for i in range(n-1) if parse.heads[i] == gold_heads[i]])
 
 
@@ -497,8 +496,6 @@ def train(parser: Parser, sentences, nr_iter):
         corr = 0; total = 0
         random.shuffle(sentences)
         for words, gold_tags, gold_parse, gold_label in sentences:
-            # if gold_label not in LABELS:
-            #     LABELS.append(gold_label)
             corr += parser.train_one(itn, words, gold_tags, gold_label, gold_parse)
             if itn < 5:
                 parser.tagger.train_one(words, gold_tags)
@@ -508,7 +505,6 @@ def train(parser: Parser, sentences, nr_iter):
             parser.tagger.model.average_weights()
     print('Averaging weights')
     parser.move_model.average_weights()
-    parser.label_model.average_weights()
 
 
 def read_conll(loc):
@@ -604,11 +600,11 @@ if __name__ == '__main__':
     # MOVES_LAB = SHIFT_MOVES + RIGHT_MOVES + LEFT_MOVES
     sentences = list(read_conll(sys.argv[3]))
 
-    LABELS = collect_labels(sentences)
+    labels = collect_labels(sentences)
     SHIFT_MOVES = [(SHIFT, None)]
-    RIGHT_MOVES = [(RIGHT, label) for label in LABELS]
-    LEFT_MOVES = [(LEFT, label) for label in LABELS] 
-    MOVES_LAB = SHIFT_MOVES + RIGHT_MOVES + LEFT_MOVES 
+    RIGHT_MOVES = [(RIGHT, label) for label in labels]
+    LEFT_MOVES = [(LEFT, label) for label in labels] 
+    Classes = SHIFT_MOVES + RIGHT_MOVES + LEFT_MOVES 
     if len(sys.argv) == 4 and sys.argv[1] == 'train':
         parser = Parser(sys.argv[2], load=False)
         main_train(sys.argv[2], sys.argv[3])
