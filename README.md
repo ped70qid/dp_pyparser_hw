@@ -27,6 +27,39 @@ Sonstiges:
 `main_test()` wurde angepasst, um den LAS zu berechnen.
 `collect_labels` wurde hinzugefügt, um die Labels vor dem Training zu sammeln.
 
+---
+
+### Test Ergebnisse:
+
+Original:
+
+```
+Parsing took 32887.706 ms
+UAS: 233755 / 264354 = 0.8842499073212435
+Correct trees: 6525 / 17233 = 0.37863401613184006
+```
+Seperate:
+```
+Parsing took 80444.357 ms
+UAS: 233505 / 264354 = 0.8833042057241426
+LAS: 238029 / 264354 = 0.9004176218252797
+Correct trees: 6460 / 17233 = 0.3748621830209482
+```
+
+Joined:
+```
+Parsing took 117384.828 ms
+UAS: 233393 / 264354 = 0.8828805314086414
+LAS: 3514 / 264354 = 0.01329278164884965
+Correct trees: 6669 / 17233 = 0.3869900771775083
+```
+
+---
+
+
+
+
+
 ### Notes
 ###### uv commands
 - `uv init`
