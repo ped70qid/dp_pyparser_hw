@@ -20,7 +20,7 @@ START = ['-START-', '-START2-']
 END = ['-END-', '-END2-']
 
 # ITERATIONS = 15
-ITERATIONS = 1
+ITERATIONS = 15
 
 class DefaultList(list):
     """A list that returns a default value if index out of bounds."""

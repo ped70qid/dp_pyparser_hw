@@ -89,7 +89,6 @@ class Parser(object):
             self.model.update(best, guess, features)
             i = transition(guess, i, stack, parse)
             self.confusion_matrix[best][guess] += 1
-            print(f"{features=}")
         return len([i for i in range(n-1) if parse.heads[i] == gold_heads[i]])
 
 
@@ -283,10 +282,8 @@ class Perceptron(object):
             if feat not in all_weights:
                 continue
             weights = all_weights[feat]
-            # print(f"for {feat=} is {weights=}")
             for clas, weight in weights.items():
                 scores[clas] += value * weight
-        # print(f"{scores=}")        
         return scores
 
     def update(self, truth, guess, features):       
